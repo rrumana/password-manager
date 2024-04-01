@@ -1,7 +1,8 @@
 use clap::{Args, Parser, Subcommand};
 
 #[derive(Debug, Parser)]
-#[command(author, version, about)]
+#[command(author = "Ryan Rumana", version, about)]
+/// A very simple password manager
 pub struct PwmParse {
     #[clap(subcommand)]
     pub command: Command,
