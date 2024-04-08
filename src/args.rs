@@ -10,6 +10,15 @@ pub struct PwmParse {
 
 #[derive(Debug, Subcommand)]
 pub enum Command{
+    /// log user into their account
+    Login(Login),
+
+    /// Audit the current session
+    Session(Session),
+
+    /// Log user out of their account
+    Logout(Logout),
+
     /// add a new password to your collection
     Add(Add),
 
@@ -21,6 +30,24 @@ pub enum Command{
 
     /// list all services for which you have passwords
     List(List),
+}
+
+#[derive(Debug, Args)]
+pub struct Login {
+    /// The username of the account you want to log into
+    pub username: String,
+}
+
+#[derive(Debug, Args)]
+pub struct Session {
+    /// The username of the account you want to audit
+    pub audit: Option<bool>,
+}
+
+#[derive(Debug, Args)]
+pub struct Logout {
+    /// The username of the account you want to log out of
+    pub username: String,
 }
 
 #[derive(Debug, Args)]
@@ -47,6 +74,6 @@ pub struct Delete {
 #[derive(Debug, Args)]
 pub struct List {
     /// Toggle between listing only the services or listing the services and passwords. Defaults to false.
-    pub include_password: bool,
+    pub include_password: Option<bool>,
 }
 

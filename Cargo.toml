@@ -8,3 +8,8 @@ edition = "2021"
 [dependencies]
 text_io = "0.1.12"
 clap = { version = "4.5.4", features = ["derive"] }
+rpassword = "7.3.1"
+anyhow = "1.0.81"
+rust-crypto = "0.2.36"
+argon2 = "0.5.3"
+hex = "0.4.3"
