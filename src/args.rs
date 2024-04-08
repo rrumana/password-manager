@@ -10,6 +10,9 @@ pub struct PwmParse {
 
 #[derive(Debug, Subcommand)]
 pub enum Command{
+    /// Create a new account
+    Signup(Signup),
+
     /// log user into their account
     Login(Login),
 
@@ -30,6 +33,12 @@ pub enum Command{
 
     /// list all services for which you have passwords
     List(List),
+}
+
+#[derive(Debug, Args)]
+pub struct Signup {
+    /// The username of the account to be created
+    pub username: String,
 }
 
 #[derive(Debug, Args)]
