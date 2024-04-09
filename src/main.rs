@@ -14,9 +14,9 @@ use sha2::Sha256;
 use hkdf::Hkdf;
 use drbg::thread::LocalCtrDrbg;
 
-use aes_gcm::{
-    aead::{Aead, AeadCore, KeyInit, OsRng},
-    Aes256Gcm, Key // Or `Aes128Gcm`
+use aes_gcm_siv::{
+    aead::{Aead, KeyInit},
+    Aes256GcmSiv, Key, Nonce
 };
 
 // key derivation function (kdf) using Argon2
@@ -53,10 +53,9 @@ fn csprng<const LEN: usize>() -> Result<[u8; LEN]> {
 }
 
 // Encrypt plaintext using AES-256-GCM
-fn encrypt_aes_gcm(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);    
-    let ciphertext = match cipher.encrypt(&nonce, plaintext) {
+fn encrypt_aes_gcm(plaintext: &[u8], key: &[u8; 32], nonce: &Nonce) -> Result<Vec<u8>> {
+    let cipher = Aes256GcmSiv::new(Key::<Aes256GcmSiv>::from_slice(key));
+    let ciphertext = match cipher.encrypt(nonce, plaintext) {
         Ok(text) => text.to_vec(),
         Err(e) => return Err(anyhow!("Error encrypting plaintext using AES-256-GCM: {}", e)),
     };
@@ -64,13 +63,13 @@ fn encrypt_aes_gcm(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
 }
 
 // Decrypt ciphertext using AES-256-GCM
-fn decrypt_aes_gcm(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
-    let decipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
-    let ciphertext = match decipher.decrypt(plaintext) {
+fn decrypt_aes_gcm(ciphertext: &[u8], key: &[u8; 32], nonce: &Nonce) -> Result<Vec<u8>> {
+    let cipher = Aes256GcmSiv::new(Key::<Aes256GcmSiv>::from_slice(key));
+    let plaintext = match cipher.decrypt(nonce, ciphertext) {
         Ok(text) => text.to_vec(),
-        Err(e) => return Err(anyhow!("Error encrypting plaintext using AES-256-GCM: {}", e)),
+        Err(e) => return Err(anyhow!("Error decrypting plaintext using AES-256-GCM: {}", e)),
     };
-    Ok(ciphertext)
+    Ok(plaintext)
 }
 
 
@@ -118,11 +117,15 @@ fn sign_up(username: &String, password: &String) -> Result<()> {
     let symmetric_key: [u8; 32] = csprng()?;
     println!("Symmetric Key: {}", hex::encode(symmetric_key));
 
-    let protected_symmetric_key: &[u8] = &encrypt_aes_gcm(&symmetric_key, &stretched_master_key)?; 
+    let iv: [u8; 12] = csprng()?;
+    let nonce = Nonce::from_slice(&iv);
+    println!("Initialization Vector: {}", hex::encode(iv));
+
+    let protected_symmetric_key: &[u8] = &encrypt_aes_gcm(&symmetric_key, &stretched_master_key, &nonce)?; 
     println!("Protected Symmetric Key: {}", hex::encode(protected_symmetric_key));
 
-    let unprotected_symmetric_key: &[u8] = &encrypt_aes_gcm(&symmetric_key, &stretched_master_key)?; 
-    println!("Protected Symmetric Key: {}", hex::encode(protected_symmetric_key)); 
+    let unprotected_symmetric_key: &[u8] = &decrypt_aes_gcm(&protected_symmetric_key, &stretched_master_key, &nonce)?; 
+    println!("Decrypted Symmetric Key: {}", hex::encode(unprotected_symmetric_key)); 
 
     // create database
     //
