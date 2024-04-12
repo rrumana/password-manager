@@ -1,15 +1,16 @@
 mod args;
 mod crypto;
+mod password;
 
 use args::*;
+use password::*;
 use clap::Parser;
 use std::io::Write;
+use std::fs;
 use anyhow::{anyhow, Result};
 use std::env;
 use aes_gcm_siv::Nonce;
 
-
-// TODO: make a database to store all of this stuff
 
 fn _check_credentials(_username: &String, _password: &String) -> Result<()> {
     // check if user exists
@@ -20,15 +21,9 @@ fn _check_credentials(_username: &String, _password: &String) -> Result<()> {
     Ok(())
 }
 
-fn _decrypt_database(_username: &String, _password: &String) -> Result<()> {
-    // decrypt the database
-    // return the decrypted database
-    Ok(())
-}
-
-
 fn sign_up(username: &String, password: &String) -> Result<()> {
-    // generate master key using Argon2
+    println!("Beginning cryptography.");
+
     let master_key = crypto::kdf(username, password)?;
     println!("Master key: {}", hex::encode(master_key));
     
@@ -50,12 +45,68 @@ fn sign_up(username: &String, password: &String) -> Result<()> {
 
     let unprotected_symmetric_key: &[u8] = &crypto::decrypt_aes_gcm(&protected_symmetric_key, &stretched_master_key, &nonce)?; 
     println!("Decrypted Symmetric Key: {}", hex::encode(unprotected_symmetric_key)); 
+    println!("Cryptography complete.");
+    println!("");
 
+    println!("Beginning database operations.");
     // create database
-    //
+    let conn = create_database()?;
+
+    let test_password1 = Password {
+        id: 0,
+        service: "hulu.com".to_string(),
+        password: "abc123".to_string(),
+    };
+
+    let test_password2 = Password {
+        id: 0,
+        service: "hulu.com1".to_string(),
+        password: "abc12983746534".to_string(),
+    }; 
+    
+    let test_password3 = Password {
+        id: 0,
+        service: "hulu.com2".to_string(),
+        password: "abc1233".to_string(),
+    }; 
+
+
+    // put something into database
+    println!("Inserting passwords into database:");
+    insert_password(&conn, &test_password1.service, &test_password1.password)?;
+    insert_password(&conn, &test_password2.service, &test_password2.password)?;
+    insert_password(&conn, &test_password3.service, &test_password3.password)?;
+
+    // print out database
+    println!("Printing Unprotected database:");
+    print_database(&conn)?;
+
+    //save database
+    println!("Saving database:");
+    save_database(&conn, &username)?;
+
     // encrypt database
-    // 
-    // decrypt_database(username, password)?;
+    println!("Encrypting database:");
+    encrypt_database(&username, &symmetric_key)?;
+
+    // delete unencrypted database
+    println!("Deleting unencrypted database:"); 
+    fs::remove_file("rcrumana.db")?;
+
+    // decrypt database
+    println!("Recovering original databse through encryption:");
+    decrypt_database(&username, &symmetric_key)?;
+
+    // printing database after decryption
+    println!("Loading unprotected database into memory:");
+    let new_conn = load_database(&username)?;
+
+    println!("Printing unprotected database:");
+    print_database(&new_conn)?;
+
+    println!("Database operations complete.");
+
+    // return Ok if successful
     Ok(())
 }
 
