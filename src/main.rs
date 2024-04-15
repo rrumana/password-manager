@@ -11,13 +11,34 @@ use anyhow::{anyhow, Result};
 use std::env;
 use aes_gcm_siv::Nonce;
 
+//  TODO List:
+//  - Turn this proof of concept into client-server model
+//    - The client side must have accesible API for chrome to use as extension
+//    - The server side must be always running
+//      - Look into hosting small server in the future when this is finished.
+//
+//  - Create a map to store master password hashes and the corresponding symmetric keys
+//    - The map should be stored in memory while running
+//    - The map should be saved to disk when the program is closed
+//    - The map is the responsibility of the server when implemented
+//
+//  - Create a flag and database to store the current user session
+//    - The session should be stored in memory while running
+//    - The session is cleared upon logout or program close
+//    - The session is the responsibility of the client when implemented
+//
+//  - Implement client side experience into browser extension
 
-fn _check_credentials(_username: &String, _password: &String) -> Result<()> {
-    // check if user exists
-    // if user exists, check if password is correct
-    // if password is correct, return Ok(())
-    // else return Err("Incorrect password")
-    // else return Err("User does not exist")
+fn check_credentials(username: &String, password: &String) -> Result<()> {
+    // generate master password hash
+    let master_key = crypto::kdf(username, password)?;
+    let master_password_hash = crypto::kdf(password, &hex::encode(master_key))?;
+    
+    // if map does not contain master_password_hash
+    // Map controlled by server side, make this first
+    return Err(anyhow!("Incorrect username or password"));
+ 
+    // if it does, return Ok(()), 
     Ok(())
 }
 
@@ -112,18 +133,23 @@ fn sign_up(username: &String, password: &String) -> Result<()> {
 
 
 fn login(_username: &String, _password: &String) -> Result<()> {
-    // TODO
+    // Check if the user exists
+    // Decrypt user database
+    // Start current user session
     Ok(())
 }
 
-fn audit_session(_username: &String) -> Result<()> {
-    // decrypt the database
-    // print out all of the services and passwords
+fn audit_session() -> Result<()> {
+    // print out session information
     Ok(())
 }
 
 fn _logout(_username: &String, _password: &String) -> Result<()> {
-    // remove the decrypted database
+    // if username matches current session
+    // remove the current session
+    // save the database
+    // the decrypted database
+    // delete unencrypted database
     // return Ok(())
     Ok(())
 }
@@ -160,7 +186,7 @@ fn main() -> Result<()> {
             print!("Enter {}'s master password: ", current_user);
             std::io::stdout().flush()?;
             let _password = rpassword::read_password()?;
-            if args.audit == Some(true) { audit_session(&current_user)?; }
+            if args.audit == Some(true) { audit_session()?; }
             else { println!("Logged in as {}", current_user); }
         },
         Command::Logout(args) => {
