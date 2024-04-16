@@ -165,7 +165,7 @@ pub fn encrypt_database(username: &str, symmetric_key: &[u8; 32]) -> Result<()> 
     let nonces = format!("{}_nonce.txt", username);
 
     // create nonce
-    let iv: [u8; 12] = crypto::csprng()?;
+    let iv: [u8; 12] = crypto::csprng();
     let nonce = Nonce::from_slice(&iv);
 
     // open db file for reading, encrypted file for writing

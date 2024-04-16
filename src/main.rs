@@ -29,14 +29,14 @@ use aes_gcm_siv::Nonce;
 //
 //  - Implement client side experience into browser extension
 
-fn check_credentials(username: &String, password: &String) -> Result<()> {
+fn _check_credentials(_username: &String, _password: &String) -> Result<()> {
     // generate master password hash
-    let master_key = crypto::kdf(username, password)?;
-    let master_password_hash = crypto::kdf(password, &hex::encode(master_key))?;
+    //let master_key = crypto::kdf(username, password)?;
+    //let master_password_hash = crypto::kdf(password, &hex::encode(master_key))?;
     
     // if map does not contain master_password_hash
     // Map controlled by server side, make this first
-    return Err(anyhow!("Incorrect username or password"));
+    //return Err(anyhow!("Incorrect username or password"));
  
     // if it does, return Ok(()), 
     Ok(())
@@ -54,10 +54,10 @@ fn sign_up(username: &String, password: &String) -> Result<()> {
     let stretched_master_key = crypto::hkdf(&master_key)?;
     println!("Stretched Master Key: {}", hex::encode(stretched_master_key));
     
-    let symmetric_key: [u8; 32] = crypto::csprng()?;
+    let symmetric_key: [u8; 32] = crypto::csprng();
     println!("Symmetric Key: {}", hex::encode(symmetric_key));
 
-    let iv: [u8; 12] = crypto::csprng()?;
+    let iv: [u8; 12] = crypto::csprng();
     let nonce = Nonce::from_slice(&iv);
     println!("Initialization Vector: {}", hex::encode(iv));
 
