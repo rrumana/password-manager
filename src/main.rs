@@ -43,89 +43,20 @@ fn _check_credentials(_username: &String, _password: &String) -> Result<()> {
 }
 
 fn sign_up(username: &String, password: &String) -> Result<()> {
-    println!("Beginning cryptography.");
-
     let master_key = crypto::kdf(username, password)?;
-    println!("Master key: {}", hex::encode(master_key));
-    
     let master_password_hash = crypto::kdf(password, &hex::encode(master_key))?;
-    println!("Master password hash: {}", hex::encode(master_password_hash));
-    
     let stretched_master_key = crypto::hkdf(&master_key)?;
-    println!("Stretched Master Key: {}", hex::encode(stretched_master_key));
-    
     let symmetric_key: [u8; 32] = crypto::csprng();
-    println!("Symmetric Key: {}", hex::encode(symmetric_key));
-
     let iv: [u8; 12] = crypto::csprng();
     let nonce = Nonce::from_slice(&iv);
-    println!("Initialization Vector: {}", hex::encode(iv));
-
     let protected_symmetric_key: &[u8] = &crypto::encrypt_aes_gcm(&symmetric_key, &stretched_master_key, &nonce)?; 
-    println!("Protected Symmetric Key: {}", hex::encode(protected_symmetric_key));
 
-    let unprotected_symmetric_key: &[u8] = &crypto::decrypt_aes_gcm(&protected_symmetric_key, &stretched_master_key, &nonce)?; 
-    println!("Decrypted Symmetric Key: {}", hex::encode(unprotected_symmetric_key)); 
-    println!("Cryptography complete.");
-    println!("");
+    // send stretched master key and protected symmetric key to server
 
-    println!("Beginning database operations.");
-    // create database
+    // create user database
     let conn = create_database()?;
 
-    let test_password1 = Password {
-        id: 0,
-        service: "hulu.com".to_string(),
-        password: "abc123".to_string(),
-    };
-
-    let test_password2 = Password {
-        id: 0,
-        service: "hulu.com1".to_string(),
-        password: "abc12983746534".to_string(),
-    }; 
-    
-    let test_password3 = Password {
-        id: 0,
-        service: "hulu.com2".to_string(),
-        password: "abc1233".to_string(),
-    }; 
-
-
-    // put something into database
-    println!("Inserting passwords into database:");
-    insert_password(&conn, &test_password1.service, &test_password1.password)?;
-    insert_password(&conn, &test_password2.service, &test_password2.password)?;
-    insert_password(&conn, &test_password3.service, &test_password3.password)?;
-
-    // print out database
-    println!("Printing Unprotected database:");
-    print_database(&conn)?;
-
-    //save database
-    println!("Saving database:");
-    save_database(&conn, &username)?;
-
-    // encrypt database
-    println!("Encrypting database:");
-    encrypt_database(&username, &symmetric_key)?;
-
-    // delete unencrypted database
-    println!("Deleting unencrypted database:"); 
-    fs::remove_file("rcrumana.db")?;
-
-    // decrypt database
-    println!("Recovering original databse through encryption:");
-    decrypt_database(&username, &symmetric_key)?;
-
-    // printing database after decryption
-    println!("Loading unprotected database into memory:");
-    let new_conn = load_database(&username)?;
-
-    println!("Printing unprotected database:");
-    print_database(&new_conn)?;
-
-    println!("Database operations complete.");
+    // start user session
 
     // return Ok if successful
     Ok(())
@@ -240,19 +171,5 @@ fn main() -> Result<()> {
         println!("Current user: {}", env::var(env_key)?);
     }
  
-    //println!("Enter in a string below:");
-    //let line: String = read!("{}\n");
-    //println!("You entered: {}", line);
-
-    // parse command line arguments
-    // pwm --version
-    // pwm --help
-    // pwm login <username>
-    // pwm session <audit>
-    // pwm logout <username>
-    // pwm list <include_password>
-    // pwm add <service name> <password>
-    // pwm get <service name>
-    // pwm remove <service name>
     Ok(())
 } 

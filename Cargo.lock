@@ -261,16 +261,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "drbg"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d420fb23906c999c4b001c4c5d31f76b7dae9042592855dd0cc5a2b5b1e8950"
-dependencies = [
- "aes",
- "getrandom",
-]
-
-[[package]]
 name = "fallible-iterator"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -442,7 +432,6 @@ dependencies = [
  "anyhow",
  "argon2",
  "clap",
- "drbg",
  "hex",
  "hkdf",
  "rand_core",
