@@ -172,4 +172,21 @@ fn main() -> Result<()> {
     }
  
     Ok(())
-} 
+}
+
+fn start_client() -> Result<()> {
+
+    Ok(())
+}
+
+fn start_server() -> Result<()> {
+    Ok(())
+}
+
+fn stop_client() -> Result<()> {
+    Ok(())
+}
+
+fn stop_server() -> Result<()> {
+    Ok(())
+}
