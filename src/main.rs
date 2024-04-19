@@ -94,6 +94,8 @@ fn signup_input() -> Result<()> {
     // pass username and password value onto the signup function
     signup_handler(username, password)?;
 
+    println!("Signup successful, welcome to Password Manager!\n");
+
     // reutrn Ok if signup is successful
     Ok(())
 }
@@ -147,11 +149,11 @@ fn login_input() -> Result<()> {
         // if not, print an error message and loop again
         match login_handler(username, password) {
             Ok(_) => {
-                println!("Login successful, welcome back!");
+                println!("Login successful, welcome back!\n");
                 break;
             }
             Err(_) => {
-                println!("Error: Invalid username or password, please try again.");
+                println!("Error: Invalid username or password, please try again.\n");
                 continue;
             }
         }
@@ -203,13 +205,99 @@ fn get_key(master_password_hash: &[u8; 32]) -> Result<UserKeys> {
     Ok(keys)
 }
 
+fn put() -> Result<()> {
+    // get the service name
+    let service = input::<String>()
+        .repeat_msg("Enter the service name: ")
+        .add_err_test(|x| !x.is_empty(), "Service name cannot be empty.")
+        .try_get()?;
+    
+    // ask user whether they will be providing a password or generating one
+    let provide = input::<String>()
+        .repeat_msg("Will you be providing a password (NOT RECOMMENDED)? (y/n): ")
+        .add_err_test(|x| x == "y" || x == "n", "Please enter 'y' or 'n'.")
+        .try_get()?;
 
+    
+    // get the password or generate a random one
+    let password = match provide.as_str() {
+        "y" => input::<String>()
+                .repeat_msg("Enter the password: ")
+                .add_err_test(|x| !x.is_empty(), "Password cannot be empty.")
+                .add_err_test(|x| x.len() >= 10, "Password must be at least 10 characters.")
+                .try_get()?,
+        "n" => hex::encode(crypto::csprng::<32>()),
+        &_ => { return Err(anyhow!("Error: How did we get here?")); }
+    };
+
+    // add this password to the username's password database
+    // Need to have some sort of flag to determine if logged in and how to retrieve username
+
+    // return Ok if successful
+    Ok(())
+}
+
+fn get() -> Result<()> {
+    // get the service name
+    let service = input::<String>()
+        .repeat_msg("Enter the service name: ")
+        .add_err_test(|x| !x.is_empty(), "Service name cannot be empty.")
+        .try_get()?;
+
+    // get the password for the specified service
+    // Need to have some sort of flag to determine if logged in and how to retrieve username
+
+    // return Ok if successful
+    Ok(())
+}
+
+fn logout() -> Result<()> {
+    // remove the session from memory
+    // return Ok if successful
+    Ok(())
+}
+
+fn delete() -> Result<()> {
+    // get the service name
+    let service = input::<String>()
+        .repeat_msg("Enter the service name: ")
+        .add_err_test(|x| !x.is_empty(), "Service name cannot be empty.")
+        .try_get()?;
+
+    // remove the password for the specified service
+    // Need to have some sort of flag to determine if logged in and how to retrieve username
+
+    // return Ok if successful
+    Ok(())
+}
+
+fn purge() -> Result<()> {
+    // remove the user's password database
+    // Need to have some sort of flag to determine if logged in and how to retrieve username
+
+    // return Ok if successful
+    Ok(())
+}
+
+fn print_commands() {
+    println!("Commands:");
+    println!("signup - Create a new account");
+    println!("login - Log user into their account");
+    println!("put - Add a new password to your collection");
+    println!("get - Get the password for a specified service");
+    println!("help - Print this list of commands");
+    println!("logout - Log user out of their account");
+    println!("delete - Remove the entry for a specified service");
+    println!("purge - Remove the entry for a specified user");
+    println!("exit - Exit the program\n");
+}
 
 // end password manager functions
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
 fn main() -> Result<()> {
-    println!("Welcome to Password Manager");
+    println!("Welcome to Password Manager, here is a list of commands:\n");
+    print_commands();
 
     loop{
 
@@ -217,7 +305,7 @@ fn main() -> Result<()> {
 
         let command: String = match input().msg("Enter a command: ").try_get() {
             Ok(input) => {
-                println!("You entered: {}", input);
+                println!("You entered: {}\n", input);
                 input
             }
             Err(err) => {
@@ -229,7 +317,16 @@ fn main() -> Result<()> {
         match command.as_str() {
             "signup" => signup_input()?,
             "login" => login_input()?,
+            "put" => put()?,
+            "get" => get()?,
+            "help" => print_commands(),
+            "logout" => logout()?,
+            "delete" => delete()?,
+            "purge" => purge()?,
+            "exit" => break,
             _ => println!("Error: Invalid command"),
         };
     }
+
+    Ok(())
 }
