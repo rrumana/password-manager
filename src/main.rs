@@ -33,22 +33,11 @@ use aes_gcm_siv::Nonce;
 //
 //  - Implement client side experience into browser extension
 
-//////////////////////////////////////////////////////////////////////////////////////////////////
-// start logging setup
-
-
-
-
-
-
-// end logging setup
-//////////////////////////////////////////////////////////////////////////////////////////////////
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // start password manager functions
 
 // struct to store user keys
-// used as message body between server and client functions
+// to be used as message body between server and client functions
 #[derive(Debug)]
 pub struct UserKeys<'a> {
     master_password_hash: [u8; 32],
@@ -59,8 +48,6 @@ pub struct UserKeys<'a> {
 // signup function
 fn signup_input() -> Result<()> {
     // get username
-    // ensure it is long enough (8 characters)
-    // ensure it does not contain whitespace
     let username = input::<String>()
         .repeat_msg("Enter username: ")
         .add_err_test(|x| x.len() >= 8, "Username must be at least 8 characters.")
@@ -68,8 +55,6 @@ fn signup_input() -> Result<()> {
         .try_get()?;
 
     // get password and force user to repeat it
-    // ensure it is long enough (10 characters)
-    // ensure it contains at least one digit
     let mut password: String;
     let mut password_confirm: String;
 
@@ -134,8 +119,6 @@ fn signup_handler(username: String, password: String) -> Result<()> {
 
 fn login_input() -> Result<()> {
     // do input for login
-    // input verification is not neccessary
-    // any failure will give the user a try again message
     loop {
         let username = input::<String>()
             .repeat_msg("Enter your username: ")
@@ -145,8 +128,6 @@ fn login_input() -> Result<()> {
         io::stdout().flush()?;
         let password = read_password()?;
 
-        // if successful, greet the user and break the loop
-        // if not, print an error message and loop again
         match login_handler(username, password) {
             Ok(_) => {
                 println!("Login successful, welcome back!\n");
