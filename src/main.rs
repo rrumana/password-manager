@@ -34,17 +34,6 @@ use aes_gcm_siv::Nonce;
 //  - Implement client side experience into browser extension
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
-// start input parsing
-
-
-
-
-
-
-// end input parsing
-//////////////////////////////////////////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////////////////////////////////////////
 // start logging setup
 
 
@@ -58,6 +47,15 @@ use aes_gcm_siv::Nonce;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // start password manager functions
 
+// struct to store user keys
+// used as message body between server and client functions
+#[derive(Debug)]
+pub struct UserKeys<'a> {
+    master_password_hash: [u8; 32],
+    protected_symmetric_key: &'a [u8],
+    nonce: &'a Nonce,
+}
+
 // signup function
 fn signup_input() -> Result<()> {
     // get username
@@ -65,8 +63,8 @@ fn signup_input() -> Result<()> {
     // ensure it does not contain whitespace
     let username = input::<String>()
         .repeat_msg("Enter username: ")
-        .add_err_test(|x| x.len() >= 8, "Username must be at least 8 characters")
-        .add_err_test(|x| x.chars().any(|c| c.is_whitespace()), "Username must not contain whitespace")
+        .add_err_test(|x| x.len() >= 8, "Username must be at least 8 characters.")
+        .add_err_test(|x| x.chars().any(|c| c.is_whitespace()), "Username must not contain whitespace.")
         .try_get()?;
 
     // get password and force user to repeat it
@@ -78,8 +76,8 @@ fn signup_input() -> Result<()> {
     loop {
         password = input::<String>()
             .repeat_msg("Enter master password: ")
-            .add_err_test(|x| x.len() >= 10, "Master password must contain at least 10 characters")
-            .add_err_test(|x| x.chars().any(|c| c.is_digit(10)), "Master password must contain at least one digit")
+            .add_err_test(|x| x.len() >= 10, "Master password must contain at least 10 characters.")
+            .add_err_test(|x| x.chars().any(|c| c.is_digit(10)), "Master password must contain at least one digit.")
             .try_get()?;
 
         password_confirm = input::<String>()
@@ -89,7 +87,7 @@ fn signup_input() -> Result<()> {
         if password == password_confirm {
             break;
         } else {
-            println!("Error: Passwords do not match");
+            println!("Error: Passwords do not match!");
         }
     }
 
@@ -103,6 +101,9 @@ fn signup_input() -> Result<()> {
 fn signup_handler(username: String, password: String) -> Result<()> {
     // generate master key from user input using Argon2 kdf
     let master_key = crypto::kdf(&username, &password)?;
+
+    // master password hash is generated using another round of Argon2
+    let master_password_hash = crypto::kdf(&password, &hex::encode(&master_key))?;
     
     // stretch master key using HKDF
     let stretched_master_key = crypto::hkdf(&master_key)?;
@@ -113,16 +114,95 @@ fn signup_handler(username: String, password: String) -> Result<()> {
     let nonce = Nonce::from_slice(&iv);
 
     // encrypt the symmetric key using the stretched master key
-    let protected_symmetric_key = crypto::encrypt_aes_gcm(&symmetric_key, &stretched_master_key, &nonce)?;
+    let protected_symmetric_key: &[u8]  = &crypto::encrypt_aes_gcm(&symmetric_key, &stretched_master_key, &nonce)?;
+
+    // create a new UserKeys object to store the keys
+    let keys = UserKeys {
+        master_password_hash,
+        protected_symmetric_key,
+        nonce,
+    };
 
     // pass the stretched master key, encryted key, and nonce to be stored for retrieval upon login
-    assign_key(&stretched_master_key, protected_symmetric_key.as_slice(), &nonce)?;
+    assign_key(&keys)?;
+    
+    // return Ok if successful
     Ok(())
 }
 
-fn assign_key(stretched_master_key: &[u8; 32], protected_symmetric_key: &[u8], nonce: &Nonce) -> Result<()> {
+fn login_input() -> Result<()> {
+    // do input for login
+    // input verification is not neccessary
+    // any failure will give the user a try again message
+    loop {
+        let username = input::<String>()
+            .repeat_msg("Enter your username: ")
+            .try_get()?;
+
+        print!("Enter your password: ");
+        io::stdout().flush()?;
+        let password = read_password()?;
+
+        // if successful, greet the user and break the loop
+        // if not, print an error message and loop again
+        match login_handler(username, password) {
+            Ok(_) => {
+                println!("Login successful, welcome back!");
+                break;
+            }
+            Err(_) => {
+                println!("Error: Invalid username or password, please try again.");
+                continue;
+            }
+        }
+    }
+
+    // return Ok if successful
     Ok(())
 }
+
+fn login_handler(username: String, password: String) -> Result<()> {
+    // generate master key from user input using Argon2 kdf
+    let master_key = crypto::kdf(&username, &password)?;
+
+    // master password hash is generated using another round of Argon2
+    let master_password_hash = crypto::kdf(&password, &hex::encode(&master_key))?;
+    
+    // stretch master key using HKDF
+    let stretched_master_key = crypto::hkdf(&master_key)?;
+
+    // get the UserKeys object from the database of known users
+    let keys = get_key(&master_password_hash)?;
+
+    // use the stretched master key to decrypt the symmetric key
+    
+    // use the symmetric key to decrypt the user's password database
+
+    Ok(())
+}
+
+fn assign_key(keys: &UserKeys) -> Result<()> {
+    
+    // take user keys object and store it in the database of known users
+    // immediately save database of known users to disk
+    // return Ok if succesful
+
+    Ok(())
+}
+
+fn get_key(master_password_hash: &[u8; 32]) -> Result<UserKeys> {
+
+    // search through the database of known users to see if the stretched master key is present
+    // if so, recreate the UserKeys object abd send it back to the calling function
+    let keys = UserKeys {
+        master_password_hash: *master_password_hash,
+        protected_symmetric_key: &[0u8; 32],
+        nonce: Nonce::from_slice(&[0u8; 12]),
+    };
+
+    Ok(keys)
+}
+
 
 
 // end password manager functions
@@ -132,6 +212,9 @@ fn main() -> Result<()> {
     println!("Welcome to Password Manager");
 
     loop{
+
+        // open the map of known users from the save file and store it in memory
+
         let command: String = match input().msg("Enter a command: ").try_get() {
             Ok(input) => {
                 println!("You entered: {}", input);
@@ -145,7 +228,7 @@ fn main() -> Result<()> {
 
         match command.as_str() {
             "signup" => signup_input()?,
-            "login" => println!("You entered: login"),
+            "login" => login_input()?,
             _ => println!("Error: Invalid command"),
         };
     }
