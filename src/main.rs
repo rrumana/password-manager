@@ -64,7 +64,7 @@ fn signup_input() -> Result<()> {
     let username = input::<String>()
         .repeat_msg("Enter username: ")
         .add_err_test(|x| x.len() >= 8, "Username must be at least 8 characters.")
-        .add_err_test(|x| x.chars().any(|c| c.is_whitespace()), "Username must not contain whitespace.")
+        .add_err_test(|x| x.chars().any(|c| !c.is_whitespace()), "Username must not contain whitespace.")
         .try_get()?;
 
     // get password and force user to repeat it
