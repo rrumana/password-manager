@@ -10,6 +10,8 @@ Naive implementation of the cryptography has been finished:
 
 This model will make more sense with the addition of a server side application holding onto encrypted databse encryption keys. Currently they are stored locally, which is unsafe, but temporary.
 
+I think that I am going to try to implement the password manager using threads and message passing so that it can be run locally through one file instead of running two programs and then connecting them with a web socket. This will give me time to learn about Rust threading more and give me time to flesh out the communication and features of the server and client platforms before building the webapp.
+
 The database implementation has been finished, including encryption and decryption using AES. Storing the usernames and initialization vectors in a text file feels wrong but neither needs any real protection for the encryption to remain secure. I will find a more permanent home for those as well. I am envisioning the storage file being encrypted until server side verification of a correct master password hash, but that is far off into the future.
 
 Next steps for this project are (in the order I plan to do them):
