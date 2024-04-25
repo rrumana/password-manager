@@ -1,5 +1,8 @@
-# Don't need all that stuff
+# Removing the target directory
 /target
+
+# Removing the logging directory
+/logs
 
 # db files
 *.db

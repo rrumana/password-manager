@@ -2,6 +2,8 @@ mod args;
 mod crypto;
 mod password;
 
+use log::{info, warn, error, debug, trace};
+
 use read_input::prelude::*;
 
 use rpassword::read_password;
@@ -47,6 +49,8 @@ pub struct UserKeys<'a> {
 
 // signup function
 fn signup_input() -> Result<()> {
+    trace!("Gathering inputs for signup.");
+
     // get username
     let username = input::<String>()
         .repeat_msg("Enter username: ")
@@ -54,7 +58,7 @@ fn signup_input() -> Result<()> {
         .add_err_test(|x| x.chars().any(|c| !c.is_whitespace()), "Username must not contain whitespace.")
         .try_get()?;
 
-    // get password and force user to repeat it
+    // get password and repeat until user confirms with matching password
     let mut password: String;
     let mut password_confirm: String;
 
@@ -86,16 +90,14 @@ fn signup_input() -> Result<()> {
 }
 
 fn signup_handler(username: String, password: String) -> Result<()> {
-    // generate master key from user input using Argon2 kdf
+    trace!("Handling signup process");
+
+    // generating keys from user input
     let master_key = crypto::kdf(&username, &password)?;
-
-    // master password hash is generated using another round of Argon2
     let master_password_hash = crypto::kdf(&password, &hex::encode(&master_key))?;
-    
-    // stretch master key using HKDF
     let stretched_master_key = crypto::hkdf(&master_key)?;
-
-    // generate a random symmetric key and iv, use the IV to seed a nonce for AES-GCM
+    
+    // generate a symmetric key and nonce for the user
     let symmetric_key = crypto::csprng::<32>();
     let iv = crypto::csprng::<12>(); 
     let nonce = Nonce::from_slice(&iv);
@@ -103,17 +105,16 @@ fn signup_handler(username: String, password: String) -> Result<()> {
     // encrypt the symmetric key using the stretched master key
     let protected_symmetric_key: &[u8]  = &crypto::encrypt_aes_gcm(&symmetric_key, &stretched_master_key, &nonce)?;
 
-    // create a new UserKeys object to store the keys
+    // create a UserKeys object to store the keys
     let keys = UserKeys {
         master_password_hash,
         protected_symmetric_key,
         nonce,
     };
 
-    // pass the stretched master key, encryted key, and nonce to be stored for retrieval upon login
+    // pass the master_password_hash, protected_symmetric_key, and nonce to be stored for retrieval upon login
     assign_key(&keys)?;
     
-    // return Ok if successful
     Ok(())
 }
 
@@ -260,7 +261,40 @@ fn purge() -> Result<()> {
     Ok(())
 }
 
+fn handle_commands() -> Result<bool> {
+    trace!("Handling next command");
+    
+    // open the map of known users from the save file and store it in memory
+
+    let command: String = match input().msg("Enter a command: ").try_get() {
+        Ok(input) => {
+            println!("You entered: {}\n", input);
+            input
+        }
+        Err(err) => {
+            println!("Error: Invalid input {}", err);
+            return Err(anyhow!("Error: Invalid input"));
+        }
+    };
+
+    match command.as_str() {
+        "signup" => signup_input()?,
+        "login" => login_input()?,
+        "put" => put()?,
+        "get" => get()?,
+        "help" => print_commands(),
+        "logout" => logout()?,
+        "delete" => delete()?,
+        "purge" => purge()?,
+        "exit" => return Ok(true),
+        _ => error!("Error: Invalid command"),
+    };
+
+    Ok(false)
+}
+
 fn print_commands() {
+    info!("Printing list of commands");
     println!("Commands:");
     println!("signup - Create a new account");
     println!("login - Log user into their account");
@@ -276,38 +310,30 @@ fn print_commands() {
 // end password manager functions
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-fn main() -> Result<()> {
+fn main() {
+
+    // initialize logging from configuration file
+    // since this function is fallable we need to handle the result
+    match log4rs::init_file("log_config.yml", Default::default()) {
+        Ok(_) => info!("New logging instance initialized"),
+        Err(err) => eprintln!("Error: {}", err),
+    }
+
+    // print the welcome message and list of commands
     println!("Welcome to Password Manager, here is a list of commands:\n");
     print_commands();
 
+    // loop while handling user input until the user exits the program
+    // Recoverable errors propagated back to main are logged and the loop continues
     loop{
-
-        // open the map of known users from the save file and store it in memory
-
-        let command: String = match input().msg("Enter a command: ").try_get() {
-            Ok(input) => {
-                println!("You entered: {}\n", input);
-                input
-            }
-            Err(err) => {
-                println!("Error: Invalid input {}", err);
-                continue;
-            }
-        };
-
-        match command.as_str() {
-            "signup" => signup_input()?,
-            "login" => login_input()?,
-            "put" => put()?,
-            "get" => get()?,
-            "help" => print_commands(),
-            "logout" => logout()?,
-            "delete" => delete()?,
-            "purge" => purge()?,
-            "exit" => break,
-            _ => println!("Error: Invalid command"),
-        };
+        match handle_commands() {
+            Ok(true) => break,
+            Err(err) => error!("Error: {}", err),
+            _ => continue,
+        }
     }
 
-    Ok(())
+    // this line signifies in the log that the program is exiting
+    // this will be removed in favor of a more idiomatic approach once the program is more complete
+    info!("Exiting Password Manager");
 }

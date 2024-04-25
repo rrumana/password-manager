@@ -1,0 +1,19 @@
+# Scan this document for changes every 60 seconds
+refresh_rate: 60 seconds
+
+appenders:
+  # Appender for sending error messages to user
+  stdout:
+    kind: console
+
+  # Appender for writing error messages to a file
+  file:
+    kind: file
+    path: "logs/test.log"
+    append: true
+
+root:
+  # Default logging level, set to trace for debugging
+  level: trace
+  appenders:
+    - file
