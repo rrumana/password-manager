@@ -7,12 +7,14 @@ use log::{info, warn, error, debug, trace};
 use read_input::prelude::*;
 
 use rpassword::read_password;
+use std::os::unix::net::UnixStream;
 use args::*;
 use password::*;
 use clap::Parser;
 use std::io::Write;
 use std::fs;
 use std::io;
+use std::io::prelude::*;
 use std::env;
 use anyhow::{anyhow, Result};
 use aes_gcm_siv::Nonce;
@@ -36,19 +38,34 @@ use aes_gcm_siv::Nonce;
 //  - Implement client side experience into browser extension
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// start password manager functions
+// start message passing structs
 
 // struct to store user keys
 // to be used as message body between server and client functions
 #[derive(Debug)]
-pub struct UserKeys<'a> {
+pub struct UserKeys {
     master_password_hash: [u8; 32],
+    protected_symmetric_key: Vec<u8>,
+    nonce: Nonce,
+}
+
+// Struct to store the session
+// to be used as an intenal flag for the client
+#[derive(Debug)]
+pub struct Session<'a> {
+    active: bool,
+    username: String,
     protected_symmetric_key: &'a [u8],
     nonce: &'a Nonce,
 }
 
-// signup function
-fn signup_input() -> Result<()> {
+// end message passing structs
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+// signup functions
+
+fn signup_input(session: &mut Session) -> Result<()> {
     trace!("Gathering inputs for signup.");
 
     // get username
@@ -81,7 +98,7 @@ fn signup_input() -> Result<()> {
     }
 
     // pass username and password value onto the signup function
-    signup_handler(username, password)?;
+    signup_handler(username, password, session)?;
 
     println!("Signup successful, welcome to Password Manager!\n");
 
@@ -89,7 +106,7 @@ fn signup_input() -> Result<()> {
     Ok(())
 }
 
-fn signup_handler(username: String, password: String) -> Result<()> {
+fn signup_handler(username: String, password: String, session: &mut Session) -> Result<()> {
     trace!("Handling signup process");
 
     // generating keys from user input
@@ -100,10 +117,10 @@ fn signup_handler(username: String, password: String) -> Result<()> {
     // generate a symmetric key and nonce for the user
     let symmetric_key = crypto::csprng::<32>();
     let iv = crypto::csprng::<12>(); 
-    let nonce = Nonce::from_slice(&iv);
+    let nonce = *Nonce::from_slice(&iv);
 
     // encrypt the symmetric key using the stretched master key
-    let protected_symmetric_key: &[u8]  = &crypto::encrypt_aes_gcm(&symmetric_key, &stretched_master_key, &nonce)?;
+    let protected_symmetric_key = crypto::encrypt_aes_gcm(&symmetric_key, &stretched_master_key, &nonce)?;
 
     // create a UserKeys object to store the keys
     let keys = UserKeys {
@@ -114,11 +131,31 @@ fn signup_handler(username: String, password: String) -> Result<()> {
 
     // pass the master_password_hash, protected_symmetric_key, and nonce to be stored for retrieval upon login
     assign_key(&keys)?;
+
+    // log in as a convenience to the user
+    login_handler(username, password, session)?;
     
     Ok(())
 }
 
-fn login_input() -> Result<()> {
+fn assign_key(keys: &UserKeys) -> Result<()> {
+    
+    // take user keys object and store it in the database of known users
+    // immediately save database of known users to disk
+    // return Ok if succesful
+
+    Ok(())
+}
+
+
+// end signup functions
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+// start login functions
+
+fn login_input(session: &mut Session) -> Result<()> {
     // do input for login
     loop {
         let username = input::<String>()
@@ -129,7 +166,7 @@ fn login_input() -> Result<()> {
         io::stdout().flush()?;
         let password = read_password()?;
 
-        match login_handler(username, password) {
+        match login_handler(username, password, session) {
             Ok(_) => {
                 println!("Login successful, welcome back!\n");
                 break;
@@ -145,34 +182,38 @@ fn login_input() -> Result<()> {
     Ok(())
 }
 
-fn login_handler(username: String, password: String) -> Result<()> {
-    // generate master key from user input using Argon2 kdf
+fn login_handler(username: String, password: String, session: &mut Session) -> Result<()> {
+    // generating keys from user input
     let master_key = crypto::kdf(&username, &password)?;
-
-    // master password hash is generated using another round of Argon2
     let master_password_hash = crypto::kdf(&password, &hex::encode(&master_key))?;
-    
-    // stretch master key using HKDF
     let stretched_master_key = crypto::hkdf(&master_key)?;
 
     // get the UserKeys object from the database of known users
     let keys = get_key(&master_password_hash)?;
 
-    // use the stretched master key to decrypt the symmetric key
-    
-    // use the symmetric key to decrypt the user's password database
+    // load values into the current session object
+    let Session { active: true, username: username, protected_symmetric_key: keys.protected_symmetric_key, nonce: keys.nonce } = session;
 
     Ok(())
 }
 
-fn assign_key(keys: &UserKeys) -> Result<()> {
-    
-    // take user keys object and store it in the database of known users
-    // immediately save database of known users to disk
-    // return Ok if succesful
+// end login functions
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+fn user(session: &mut Session) -> Result<()> {
+    // get the username from the session
+    // return the username if the user is logged in, otherwise return an error
 
     Ok(())
 }
+
+fn audit(session: &mut Session) -> Result<()> {
+    // get the session object
+    // return the session object if the user is logged in, otherwise return an error
+
+    Ok(())
+}
+
 
 fn get_key(master_password_hash: &[u8; 32]) -> Result<UserKeys> {
 
@@ -180,8 +221,8 @@ fn get_key(master_password_hash: &[u8; 32]) -> Result<UserKeys> {
     // if so, recreate the UserKeys object abd send it back to the calling function
     let keys = UserKeys {
         master_password_hash: *master_password_hash,
-        protected_symmetric_key: &[0u8; 32],
-        nonce: Nonce::from_slice(&[0u8; 12]),
+        protected_symmetric_key: vec![0u8; 32],
+        nonce: *Nonce::from_slice(&[0u8; 12]),
     };
 
     Ok(keys)
@@ -213,6 +254,7 @@ fn put() -> Result<()> {
     };
 
     // add this password to the username's password database
+
     // Need to have some sort of flag to determine if logged in and how to retrieve username
 
     // return Ok if successful
@@ -226,8 +268,11 @@ fn get() -> Result<()> {
         .add_err_test(|x| !x.is_empty(), "Service name cannot be empty.")
         .try_get()?;
 
-    // get the password for the specified service
     // Need to have some sort of flag to determine if logged in and how to retrieve username
+    // if user is not logged in return an error 
+    
+    // get the password for the specified service
+    // return the password for the specified service if it exists, otherwise return an error
 
     // return Ok if successful
     Ok(())
@@ -261,7 +306,7 @@ fn purge() -> Result<()> {
     Ok(())
 }
 
-fn handle_commands() -> Result<bool> {
+fn handle_commands(session: &mut Session) -> Result<bool> {
     trace!("Handling next command");
     
     // open the map of known users from the save file and store it in memory
@@ -278,8 +323,10 @@ fn handle_commands() -> Result<bool> {
     };
 
     match command.as_str() {
-        "signup" => signup_input()?,
-        "login" => login_input()?,
+        "signup" => signup_input(session)?,
+        "login" => login_input(session)?,
+        "user" => user(session)?,
+        "session" => audit(session)?,
         "put" => put()?,
         "get" => get()?,
         "help" => print_commands(),
@@ -319,6 +366,19 @@ fn main() {
         Err(err) => eprintln!("Error: {}", err),
     }
 
+    // create a session instance
+    let mut session = Session {
+        active: false,
+        username: String::new(),
+        protected_symmetric_key: &[0u8; 32],
+        nonce: &Nonce::from_slice(&[0u8; 12]),
+    };
+
+    // start the client side gui here
+    
+
+    // test communication to server application (Unix Socket)
+
     // print the welcome message and list of commands
     println!("Welcome to Password Manager, here is a list of commands:\n");
     print_commands();
@@ -326,12 +386,13 @@ fn main() {
     // loop while handling user input until the user exits the program
     // Recoverable errors propagated back to main are logged and the loop continues
     loop{
-        match handle_commands() {
+        match handle_commands(&mut session) {
             Ok(true) => break,
             Err(err) => error!("Error: {}", err),
             _ => continue,
         }
     }
+
 
     // this line signifies in the log that the program is exiting
     // this will be removed in favor of a more idiomatic approach once the program is more complete
