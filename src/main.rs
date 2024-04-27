@@ -214,8 +214,11 @@ fn user(session: &mut Session) -> Result<()> {
 }
 
 fn audit(session: &mut Session) -> Result<()> {
-    // get the session object
-    // return the session object if the user is logged in, otherwise return an error
+    if !session.active {
+        println!("Error: not logged in.");
+    } else {
+        println!("Printing session infor for {}:", session.username);
+    }
 
     Ok(())
 }
