@@ -253,11 +253,10 @@ pub fn encrypt_database(username: &str, symmetric_key: &[u8; 32]) -> Result<()> 
 
 pub fn decrypt_database(username: &str, symmetric_key: &[u8; 32]) -> Result<()> {
     // create filepaths
-    let filepath = format!("database/unencrypted/{}.db", username);
-    let savepath = format!("database/encrypted/{}.db.enc", username);
+    let filepath = format!("database/encrypted/{}.db.enc", username);
+    let savepath = format!("database/unencrypted/{}.db", username);
     let user_filepath = format!("database/nonce/{}_nonce.txt", username);
 
-    
     // open nonces file for reading
     let nonce_file = File::open(user_filepath)?;
 
