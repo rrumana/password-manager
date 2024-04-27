@@ -125,7 +125,7 @@ pub fn print_database(conn: &Connection) -> Result<()> {
 
 pub fn save_database(conn: &Connection, username: &str) -> Result<()> {
     // open database file for writing
-    let db_file = File::create(format!("{}.db", username))?;
+    let db_file = File::create(format!("database/unencrypted/{}.db", username))?;
 
     // create a buffwriter to write to the file
     let mut writer = BufWriter::new(db_file);
@@ -155,7 +155,7 @@ pub fn save_database(conn: &Connection, username: &str) -> Result<()> {
 
 pub fn load_database(username: &str) -> Result<Connection> {
     // open the databse file for reading
-    let db_file = File::open(format!("{}.db", username))?;
+    let db_file = File::open(format!("database/unencrypted/{}.db", username))?;
 
     // creater a reader and a buffer to read into
     let mut reader = BufReader::new(db_file);
@@ -185,17 +185,17 @@ pub fn load_database(username: &str) -> Result<Connection> {
 
 pub fn delete_user(username: &str) -> Result<()> {
     // check if typical database file exists, if so delete it
-    if Path::new(&format!("{}.db", username)).exists() {
-        std::fs::remove_file(format!("{}.db", username))?;
+    if Path::new(&format!("database/unencrypted/{}.db", username)).exists() {
+        std::fs::remove_file(format!("database/unencrypted/{}.db", username))?;
     }
     // check if encrypted database file exists, if so delete it
-    if Path::new(&format!("{}.db.enc", username)).exists()  {
-        std::fs::remove_file(format!("{}.db.enc", username))?;
+    if Path::new(&format!("database/encrypted/{}.db.enc", username)).exists()  {
+        std::fs::remove_file(format!("database/encrypted/{}.db.enc", username))?;
     }
 
     // check if nonce file exists, if so delete it
-    if Path::new(&format!("{}_nonce.txt", username)).exists() {
-        std::fs::remove_file(format!("{}_nonce.txt", username))?;
+    if Path::new(&format!("database/nonce/{}_nonce.txt", username)).exists() {
+        std::fs::remove_file(format!("database/nonce/{}_nonce.txt", username))?;
     }
 
     // return ok if successful
@@ -204,9 +204,9 @@ pub fn delete_user(username: &str) -> Result<()> {
 
 pub fn encrypt_database(username: &str, symmetric_key: &[u8; 32]) -> Result<()> {
     // create filepaths
-    let filepath = format!("{}.db", username);
-    let savepath = format!("{}.db.enc", username);
-    let nonces = format!("{}_nonce.txt", username);
+    let filepath = format!("database/unencrypted/{}.db", username);
+    let savepath = format!("database/encrypted/{}.db.enc", username);
+    let nonces = format!("database/nonce/{}_nonce.txt", username);
 
     // create nonce
     let iv: [u8; 12] = crypto::csprng();
@@ -253,9 +253,9 @@ pub fn encrypt_database(username: &str, symmetric_key: &[u8; 32]) -> Result<()> 
 
 pub fn decrypt_database(username: &str, symmetric_key: &[u8; 32]) -> Result<()> {
     // create filepaths
-    let filepath = format!("{}.db.enc", username);
-    let savepath = format!("{}.db", username);
-    let user_filepath = format!("{}_nonce.txt", username);
+    let filepath = format!("database/unencrypted/{}.db", username);
+    let savepath = format!("database/encrypted/{}.db.enc", username);
+    let user_filepath = format!("database/nonce/{}_nonce.txt", username);
 
     
     // open nonces file for reading
