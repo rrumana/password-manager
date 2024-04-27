@@ -55,7 +55,7 @@ pub struct UserKeys {
 pub struct Session {
     active: bool,
     username: String,
-    protected_symmetric_key: Vec<u8>,
+    symmetric_key: Vec<u8>,
     nonce: Nonce,
 }
 
@@ -147,16 +147,15 @@ fn assign_key(keys: &UserKeys) -> Result<()> {
     Ok(())
 }
 
-
 // end signup functions
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-// start login functions
+// start login/logout functions
 
 fn login_input(session: &mut Session) -> Result<()> {
-    // do input for login
+    // do input for login, loop until successful
     loop {
         let username = input::<String>()
             .repeat_msg("Enter your username: ")
@@ -171,8 +170,9 @@ fn login_input(session: &mut Session) -> Result<()> {
                 println!("Login successful, welcome back!\n");
                 break;
             }
-            Err(_) => {
+            Err(err) => {
                 println!("Error: Invalid username or password, please try again.\n");
+                trace!("Error: {}", err);
                 continue;
             }
         }
@@ -191,16 +191,48 @@ fn login_handler(username: String, password: String, session: &mut Session) -> R
     // get the UserKeys object from the database of known users
     let keys = get_key(&master_password_hash)?;
 
+    // decrypt protected symmetric key using the stretched master key
+    let symmetric_key = crypto::decrypt_aes_gcm(&keys.protected_symmetric_key, &stretched_master_key, &keys.nonce)?;
+
     // load values into the current session object
     session.active = true;
     session.username = username;
-    session.protected_symmetric_key = keys.protected_symmetric_key;
+    session.symmetric_key = symmetric_key;
     session.nonce = keys.nonce;
+
+    // create session database
+
 
     Ok(())
 }
 
-// end login functions
+fn get_key(master_password_hash: &[u8; 32]) -> Result<UserKeys> {
+
+    // search through the database of known users to see if the stretched master key is present
+    // if so, recreate the UserKeys object abd send it back to the calling function
+    let keys = UserKeys {
+        master_password_hash: *master_password_hash,
+        protected_symmetric_key: vec![0u8; 32],
+        nonce: *Nonce::from_slice(&[0u8; 12]),
+    };
+
+    Ok(keys)
+}
+
+fn logout(session: &mut Session) -> Result<()> {
+    // delete session database
+    
+
+    // zero the session object
+    session.active = false;
+    session.username = String::new();
+    session.symmetric_key = vec![0u8; 32];
+    session.nonce = *Nonce::from_slice(&[0u8; 12]);
+
+    Ok(())
+}
+
+// end login/logout functions
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 fn user(session: &mut Session) -> Result<()> {
@@ -217,24 +249,12 @@ fn audit(session: &mut Session) -> Result<()> {
     if !session.active {
         println!("Error: not logged in.");
     } else {
-        println!("Printing session infor for {}:", session.username);
+        println!("Printing session info for {}:", session.username);
     }
 
+    // read the session database and print the session info
+
     Ok(())
-}
-
-
-fn get_key(master_password_hash: &[u8; 32]) -> Result<UserKeys> {
-
-    // search through the database of known users to see if the stretched master key is present
-    // if so, recreate the UserKeys object abd send it back to the calling function
-    let keys = UserKeys {
-        master_password_hash: *master_password_hash,
-        protected_symmetric_key: vec![0u8; 32],
-        nonce: *Nonce::from_slice(&[0u8; 12]),
-    };
-
-    Ok(keys)
 }
 
 fn put() -> Result<()> {
@@ -287,11 +307,6 @@ fn get() -> Result<()> {
     Ok(())
 }
 
-fn logout() -> Result<()> {
-    // remove the session from memory
-    // return Ok if successful
-    Ok(())
-}
 
 fn delete() -> Result<()> {
     // get the service name
@@ -339,7 +354,7 @@ fn handle_commands(session: &mut Session) -> Result<bool> {
         "put" => put()?,
         "get" => get()?,
         "help" => print_commands(),
-        "logout" => logout()?,
+        "logout" => logout(session)?,
         "delete" => delete()?,
         "purge" => purge()?,
         "exit" => return Ok(true),
@@ -379,7 +394,7 @@ fn main() {
     let mut session = Session {
         active: false,
         username: String::new(),
-        protected_symmetric_key: vec![0u8; 32],
+        symmetric_key: vec![0u8; 32],
         nonce: *Nonce::from_slice(&[0u8; 12]),
     };
 
