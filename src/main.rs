@@ -52,11 +52,11 @@ pub struct UserKeys {
 // Struct to store the session
 // to be used as an intenal flag for the client
 #[derive(Debug)]
-pub struct Session<'a> {
+pub struct Session {
     active: bool,
     username: String,
-    protected_symmetric_key: &'a [u8],
-    nonce: &'a Nonce,
+    protected_symmetric_key: Vec<u8>,
+    nonce: Nonce,
 }
 
 // end message passing structs
@@ -192,7 +192,10 @@ fn login_handler(username: String, password: String, session: &mut Session) -> R
     let keys = get_key(&master_password_hash)?;
 
     // load values into the current session object
-    let Session { active: true, username: username, protected_symmetric_key: keys.protected_symmetric_key, nonce: keys.nonce } = session;
+    session.active = true;
+    session.username = username;
+    session.protected_symmetric_key = keys.protected_symmetric_key;
+    session.nonce = keys.nonce;
 
     Ok(())
 }
@@ -201,8 +204,11 @@ fn login_handler(username: String, password: String, session: &mut Session) -> R
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 fn user(session: &mut Session) -> Result<()> {
-    // get the username from the session
-    // return the username if the user is logged in, otherwise return an error
+    if session.active {
+        println!("User: {}", session.username);
+    } else {
+        println!("Error: not logged in.");
+    }
 
     Ok(())
 }
@@ -370,8 +376,8 @@ fn main() {
     let mut session = Session {
         active: false,
         username: String::new(),
-        protected_symmetric_key: &[0u8; 32],
-        nonce: &Nonce::from_slice(&[0u8; 12]),
+        protected_symmetric_key: vec![0u8; 32],
+        nonce: *Nonce::from_slice(&[0u8; 12]),
     };
 
     // start the client side gui here
