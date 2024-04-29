@@ -6,6 +6,7 @@ use log::{info, warn, error, debug, trace};
 use read_input::prelude::*;
 use::chrono::prelude::*;
 use std::fs::File;
+use std::fs::OpenOptions;
 
 use rpassword::read_password;
 use std::os::unix::net::UnixStream;
@@ -198,16 +199,16 @@ fn login_handler(username: String, password: String, session: &mut Session) -> R
     let stretched_master_key = crypto::hkdf(&master_key)?;
 
     // get the UserKeys object from the database of known users
-    //let keys = get_key(&master_password_hash)?;
+    let keys = get_key(&master_password_hash)?;
 
     // decrypt protected symmetric key using the stretched master key
-    //let symmetric_key = crypto::decrypt_aes_gcm(&keys.protected_symmetric_key, &stretched_master_key, &keys.nonce)?;
+    let symmetric_key = crypto::decrypt_aes_gcm(&keys.protected_symmetric_key, &stretched_master_key, &keys.nonce)?;
 
     // load values into the current session object
-    //session.active = true;
-    //session.username = username;
-    //session.symmetric_key = symmetric_key;
-    //session.nonce = keys.nonce;
+    session.active = true;
+    session.username = username;
+    session.symmetric_key = symmetric_key;
+    session.nonce = keys.nonce;
 
     // create session logfile
     let mut session_log = File::create("logs/session.log")?; 
@@ -246,28 +247,38 @@ fn logout(session: &mut Session) -> Result<()> {
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 fn user(session: &mut Session) -> Result<()> {
-    if session.active {
-        println!("User: {}", session.username);
-    } else {
+    // checking if the user is logged in
+    if !session.active {
         println!("Error: not logged in.");
+        return Err(anyhow!("Cannot audit user while not logged in."));
     }
+
+    println!("User: {}", session.username);
 
     Ok(())
 }
 
 fn audit(session: &mut Session) -> Result<()> {
+    // check if user is logged in
     if !session.active {
         println!("Error: not logged in.");
-    } else {
-        println!("Printing session info for {}:", session.username);
+        return Err(anyhow!("Cannot audit session while not logged in."));
     }
 
-    // read the session database and print the session info
+    println!("Printing session info for {}:", session.username);
+
+    // TODO: read the session log file and print the contents
 
     Ok(())
 }
 
-fn put() -> Result<()> {
+fn put(session: &mut Session) -> Result<()> {
+    // check if user is logged in
+    if !session.active {
+        println!("Error: not logged in.");
+        return Err(anyhow!("Cannot add password while not logged in."));
+    }
+
     // get the service name
     let service = input::<String>()
         .repeat_msg("Enter the service name: ")
@@ -293,14 +304,22 @@ fn put() -> Result<()> {
     };
 
     // add this password to the username's password database
+    
 
-    // Need to have some sort of flag to determine if logged in and how to retrieve username
+    // write this action to the session log file
+    let mut session_log = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .append(true)
+        .open("logs/session.log")?;
+
+    session_log.write_all(format!("At {}, {} added service {} with password {}\n", Local::now(), session.username, service, password).as_bytes())?;
 
     // return Ok if successful
     Ok(())
 }
 
-fn get() -> Result<()> {
+fn get(session: &mut Session) -> Result<()> {
     // get the service name
     let service = input::<String>()
         .repeat_msg("Enter the service name: ")
@@ -318,7 +337,7 @@ fn get() -> Result<()> {
 }
 
 
-fn delete() -> Result<()> {
+fn delete(session: &mut Session) -> Result<()> {
     // get the service name
     let service = input::<String>()
         .repeat_msg("Enter the service name: ")
@@ -332,7 +351,7 @@ fn delete() -> Result<()> {
     Ok(())
 }
 
-fn purge() -> Result<()> {
+fn purge(session: &mut Session) -> Result<()> {
     // remove the user's password database
     // Need to have some sort of flag to determine if logged in and how to retrieve username
 
@@ -361,12 +380,12 @@ fn handle_commands(session: &mut Session) -> Result<bool> {
         "login" => login_input(session)?,
         "user" => user(session)?,
         "session" => audit(session)?,
-        "put" => put()?,
-        "get" => get()?,
+        "put" => put(session)?,
+        "get" => get(session)?,
         "help" => print_commands(),
         "logout" => logout(session)?,
-        "delete" => delete()?,
-        "purge" => purge()?,
+        "delete" => delete(session)?,
+        "purge" => purge(session)?,
         "exit" => return Ok(true),
         _ => error!("Error: Invalid command"),
     };
@@ -387,6 +406,14 @@ fn print_commands() {
     println!("purge - Remove the entry for a specified user");
     println!("exit - Exit the program\n");
 }
+
+fn cleanup() -> Result<()> {
+    // remove the session log file
+    let _ = std::fs::remove_file("logs/session.log");
+
+    Ok(())
+}
+
 
 // end password manager functions
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -428,6 +455,11 @@ fn main() {
         }
     }
 
+    // cleanup function to remove the session log file
+    match cleanup() {
+        Ok(_) => info!("Successfully cleaned up system"),
+        Err(err) => error!("Error: {}", err),
+    };
 
     // this line signifies in the log that the program is exiting
     // this will be removed in favor of a more idiomatic approach once the program is more complete
