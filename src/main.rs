@@ -1,14 +1,14 @@
-mod args;
 mod crypto;
 mod password;
 
 use log::{info, warn, error, debug, trace};
 
 use read_input::prelude::*;
+use::chrono::prelude::*;
+use std::fs::File;
 
 use rpassword::read_password;
 use std::os::unix::net::UnixStream;
-use args::*;
 use password::*;
 use clap::Parser;
 use std::io::Write;
@@ -57,6 +57,16 @@ pub struct Session {
     username: String,
     symmetric_key: Vec<u8>,
     nonce: Nonce,
+}
+
+// Struct for logging session activity
+// to be stored in a logfile that lasts the duration of the session
+#[derive(Debug)]
+pub struct Action {
+    timestamp: DateTime<Local>,
+    action: String,
+    service: String,
+    password: String,
 }
 
 // end message passing structs
@@ -178,7 +188,6 @@ fn login_input(session: &mut Session) -> Result<()> {
         }
     }
 
-    // return Ok if successful
     Ok(())
 }
 
@@ -189,19 +198,20 @@ fn login_handler(username: String, password: String, session: &mut Session) -> R
     let stretched_master_key = crypto::hkdf(&master_key)?;
 
     // get the UserKeys object from the database of known users
-    let keys = get_key(&master_password_hash)?;
+    //let keys = get_key(&master_password_hash)?;
 
     // decrypt protected symmetric key using the stretched master key
-    let symmetric_key = crypto::decrypt_aes_gcm(&keys.protected_symmetric_key, &stretched_master_key, &keys.nonce)?;
+    //let symmetric_key = crypto::decrypt_aes_gcm(&keys.protected_symmetric_key, &stretched_master_key, &keys.nonce)?;
 
     // load values into the current session object
-    session.active = true;
-    session.username = username;
-    session.symmetric_key = symmetric_key;
-    session.nonce = keys.nonce;
+    //session.active = true;
+    //session.username = username;
+    //session.symmetric_key = symmetric_key;
+    //session.nonce = keys.nonce;
 
-    // create session database
-
+    // create session logfile
+    let mut session_log = File::create("logs/session.log")?; 
+    session_log.write_all(format!("Session started at: {}\n", Local::now()).as_bytes())?;
 
     Ok(())
 }
@@ -220,8 +230,8 @@ fn get_key(master_password_hash: &[u8; 32]) -> Result<UserKeys> {
 }
 
 fn logout(session: &mut Session) -> Result<()> {
-    // delete session database
-    
+    // delete session log file
+    std::fs::remove_file("logs/session.log")?; 
 
     // zero the session object
     session.active = false;
@@ -402,6 +412,7 @@ fn main() {
     
 
     // test communication to server application (Unix Socket)
+    
 
     // print the welcome message and list of commands
     println!("Welcome to Password Manager, here is a list of commands:\n");
