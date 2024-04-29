@@ -7,6 +7,7 @@ use read_input::prelude::*;
 use::chrono::prelude::*;
 use std::fs::File;
 use std::fs::OpenOptions;
+use rusqlite::Connection;
 
 use rpassword::read_password;
 use std::os::unix::net::UnixStream;
@@ -58,7 +59,8 @@ pub struct Session {
     username: String,
     symmetric_key: Vec<u8>,
     nonce: Nonce,
-}
+    conn: Connection,
+ }
 
 // Struct for logging session activity
 // to be stored in a logfile that lasts the duration of the session
@@ -204,6 +206,9 @@ fn login_handler(username: String, password: String, session: &mut Session) -> R
     // decrypt protected symmetric key using the stretched master key
     let symmetric_key = crypto::decrypt_aes_gcm(&keys.protected_symmetric_key, &stretched_master_key, &keys.nonce)?;
 
+    // load user database into memory
+    let conn = password::load_database(&username)?;
+
     // load values into the current session object
     session.active = true;
     session.username = username;
@@ -304,7 +309,7 @@ fn put(session: &mut Session) -> Result<()> {
     };
 
     // add this password to the username's password database
-    
+     
 
     // write this action to the session log file
     let mut session_log = OpenOptions::new()

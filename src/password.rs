@@ -154,12 +154,6 @@ pub fn save_database(conn: &Connection, username: &str) -> Result<()> {
 }
 
 pub fn load_database(username: &str) -> Result<Connection> {
-    // open the databse file for reading
-    let db_file = File::open(format!("database/unencrypted/{}.db", username))?;
-
-    // creater a reader and a buffer to read into
-    let mut reader = BufReader::new(db_file);
-
     // initialize a new in-memory database and create password table
     let conn = Connection::open_in_memory()?;
     conn.execute(
@@ -170,6 +164,16 @@ pub fn load_database(username: &str) -> Result<Connection> {
         )",
         (),
     )?;
+
+    // check if the file exists, if not, return the empty table.
+    // TODO add tests for this test case.
+
+    // open the databse file for reading
+    let db_file = File::open(format!("database/unencrypted/{}.db", username))?;
+
+    // creater a reader and a buffer to read into
+    let mut reader = BufReader::new(db_file);
+
 
     // deserialize the buffer into a vec of Password structs
     let passwords: Vec<Password> = serde_json::from_reader(&mut reader)?;
