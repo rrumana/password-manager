@@ -10,14 +10,9 @@ use std::fs::OpenOptions;
 use rusqlite::Connection;
 
 use rpassword::read_password;
-use std::os::unix::net::UnixStream;
-use password::*;
-use clap::Parser;
 use std::io::Write;
-use std::fs;
 use std::io;
 use std::io::prelude::*;
-use std::env;
 use anyhow::{anyhow, Result};
 use aes_gcm_siv::Nonce;
 
@@ -31,11 +26,6 @@ use aes_gcm_siv::Nonce;
 //    - The map should be stored in memory while running
 //    - The map should be saved to disk when the program is closed
 //    - The map is the responsibility of the server when implemented
-//
-//  - Create a flag and database to store the current user session
-//    - The session should be stored in memory while running
-//    - The session is cleared upon logout or program close
-//    - The session is the responsibility of the client when implemented
 //
 //  - Implement client side experience into browser extension
 
@@ -64,13 +54,13 @@ pub struct Session {
 
 // Struct for logging session activity
 // to be stored in a logfile that lasts the duration of the session
-#[derive(Debug)]
-pub struct Action {
-    timestamp: DateTime<Local>,
-    action: String,
-    service: String,
-    password: String,
-}
+//#[derive(Debug)]
+//pub struct Action {
+    //timestamp: DateTime<Local>,
+    //action: String,
+    //service: String,
+    //password: String,
+//}
 
 // end message passing structs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -79,8 +69,6 @@ pub struct Action {
 // signup functions
 
 fn signup_input(session: &mut Session) -> Result<()> {
-    trace!("Gathering inputs for signup.");
-
     // get username
     let username = input::<String>()
         .repeat_msg("Enter username: ")
@@ -108,6 +96,7 @@ fn signup_input(session: &mut Session) -> Result<()> {
         } else {
             println!("Error: Passwords do not match!");
         }
+
     }
 
     // pass username and password value onto the signup function
@@ -115,13 +104,10 @@ fn signup_input(session: &mut Session) -> Result<()> {
 
     println!("Signup successful, welcome to Password Manager!\n");
 
-    // reutrn Ok if signup is successful
     Ok(())
 }
 
 fn signup_handler(username: String, password: String, session: &mut Session) -> Result<()> {
-    trace!("Handling signup process");
-
     // generating keys from user input
     let master_key = crypto::kdf(&username, &password)?;
     let master_password_hash = crypto::kdf(&password, &hex::encode(&master_key))?;
@@ -206,7 +192,10 @@ fn login_handler(username: String, password: String, session: &mut Session) -> R
     // decrypt protected symmetric key using the stretched master key
     let symmetric_key = crypto::decrypt_aes_gcm(&keys.protected_symmetric_key, &stretched_master_key, &keys.nonce)?;
 
-    // load user database into memory
+    // decrypt the user database
+    password::decrypt_database(&username, &symmetric_key.as_slice().try_into()?)?;
+
+    // create an in memory database connection
     let conn = password::load_database(&username)?;
 
     // load values into the current session object
@@ -214,6 +203,7 @@ fn login_handler(username: String, password: String, session: &mut Session) -> R
     session.username = username;
     session.symmetric_key = symmetric_key;
     session.nonce = keys.nonce;
+    session.conn = conn; 
 
     // create session logfile
     let mut session_log = File::create("logs/session.log")?; 
@@ -236,14 +226,28 @@ fn get_key(master_password_hash: &[u8; 32]) -> Result<UserKeys> {
 }
 
 fn logout(session: &mut Session) -> Result<()> {
-    // delete session log file
-    std::fs::remove_file("logs/session.log")?; 
+    // checking if the user is logged in
+    if !session.active {
+        println!("Error: not logged in.");
+        return Err(anyhow!("Cannot log out when not logged in."));
+    }
+
+    // save the database just to be sure
+    password::save_database(&session.conn, &session.username)?;
+
+    // encrypt the user database
+    password::encrypt_database(&session.username, &session.symmetric_key.as_slice().try_into()?)?;
+
+    // delete the unencrypted database and session log file
+    std::fs::remove_file("logs/session.log")?;
+    std::fs::remove_file(format!("databases/{}.db", session.username))?;
 
     // zero the session object
     session.active = false;
     session.username = String::new();
     session.symmetric_key = vec![0u8; 32];
     session.nonce = *Nonce::from_slice(&[0u8; 12]);
+    session.conn = Connection::open_in_memory()?;
 
     Ok(())
 }
@@ -273,6 +277,12 @@ fn audit(session: &mut Session) -> Result<()> {
     println!("Printing session info for {}:", session.username);
 
     // TODO: read the session log file and print the contents
+    let session_log = File::open("logs/session.log")?;
+    let lines = io::BufReader::new(session_log).lines();
+
+    for line in lines {
+        println!("{}", line?);
+    }
 
     Ok(())
 }
@@ -309,7 +319,8 @@ fn put(session: &mut Session) -> Result<()> {
     };
 
     // add this password to the username's password database
-     
+    password::insert_password(&session.conn, &service, &password)?;
+    password::save_database(&session.conn, &session.username)?;
 
     // write this action to the session log file
     let mut session_log = OpenOptions::new()
@@ -320,47 +331,79 @@ fn put(session: &mut Session) -> Result<()> {
 
     session_log.write_all(format!("At {}, {} added service {} with password {}\n", Local::now(), session.username, service, password).as_bytes())?;
 
-    // return Ok if successful
     Ok(())
 }
 
 fn get(session: &mut Session) -> Result<()> {
+    // check if user is logged in
+    if !session.active {
+        println!("Error: not logged in.");
+        return Err(anyhow!("Cannot retrieve password while not logged in."));
+    } 
+
     // get the service name
     let service = input::<String>()
         .repeat_msg("Enter the service name: ")
         .add_err_test(|x| !x.is_empty(), "Service name cannot be empty.")
         .try_get()?;
 
-    // Need to have some sort of flag to determine if logged in and how to retrieve username
-    // if user is not logged in return an error 
-    
-    // get the password for the specified service
-    // return the password for the specified service if it exists, otherwise return an error
+    // get the password for the specified service and print it
+    let password = password::get_password(&session.conn, &service)?;
+    println!("Password for {} is: {}", service, password);
 
-    // return Ok if successful
     Ok(())
 }
 
-
 fn delete(session: &mut Session) -> Result<()> {
+    // check if user is logged in
+    if !session.active {
+        println!("Error: not logged in.");
+        return Err(anyhow!("Cannot delete password while not logged in."));
+    }  
+
     // get the service name
     let service = input::<String>()
         .repeat_msg("Enter the service name: ")
         .add_err_test(|x| !x.is_empty(), "Service name cannot be empty.")
         .try_get()?;
 
-    // remove the password for the specified service
-    // Need to have some sort of flag to determine if logged in and how to retrieve username
+    // confirm user intention to delete the password
+    let confirm = input::<String>()
+        .repeat_msg("Are you sure you would like to delete entry?\nThis action cannot be undone (y/n): ")
+        .add_err_test(|x| x == "y" || x == "n", "Please enter 'y' or 'n'.")
+        .try_get()?;
 
-    // return Ok if successful
+    // remove the password for the specified service
+    if confirm == "y" {
+        password::delete_password(&session.conn, &service)?;
+    } else {
+        println!("Deletion cancelled.");
+    }
+
     Ok(())
 }
 
 fn purge(session: &mut Session) -> Result<()> {
-    // remove the user's password database
-    // Need to have some sort of flag to determine if logged in and how to retrieve username
+    // check if user is logged in
+    if !session.active {
+        println!("Error: not logged in.");
+        return Err(anyhow!("Cannot delete account while not logged in."));
+    } 
 
-    // return Ok if successful
+    // confirm user intention to delete all passwords
+    let confirm = input::<String>()
+        .repeat_msg("Are you sure you would like to delete user?\nThis action cannot be undone (YES/NO): ")
+        .add_err_test(|x| x == "YES" || x == "NO", "Please enter 'YES' or 'NO'.")
+        .try_get()?;
+
+    // remove the user from the database of known users
+    if confirm == "YES" {
+        password::delete_database(&session.conn)?;
+        password::delete_user(&session.username)?;
+    } else {
+        println!("Deletion cancelled.");
+    }
+
     Ok(())
 }
 
@@ -433,11 +476,19 @@ fn main() {
     }
 
     // create a session instance
+    // if this process fails, log the error and exit the program
     let mut session = Session {
         active: false,
         username: String::new(),
         symmetric_key: vec![0u8; 32],
         nonce: *Nonce::from_slice(&[0u8; 12]),
+        conn: match Connection::open_in_memory() {
+            Ok(conn) => conn,
+            Err(err) => {
+                error!("Error: {}", err);
+                return;
+            }
+        },
     };
 
     // start the client side gui here

@@ -154,36 +154,27 @@ pub fn save_database(conn: &Connection, username: &str) -> Result<()> {
 }
 
 pub fn load_database(username: &str) -> Result<Connection> {
-    // initialize a new in-memory database and create password table
-    let conn = Connection::open_in_memory()?;
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS passwords (
-            id INTEGER PRIMARY KEY,
-            service TEXT NOT NULL,
-            password TEXT NOT NULL
-        )",
-        (),
-    )?;
+    // set a filepath for reading an unencrypted database
+    let filepath = format!("database/unencrypted/{}.db", username);
 
-    // check if the file exists, if not, return the empty table.
-    // TODO add tests for this test case.
+    // initialize a new in-memory database
+    let conn = create_database()?;
 
-    // open the databse file for reading
-    let db_file = File::open(format!("database/unencrypted/{}.db", username))?;
+    // check if the file exists, if not, no need to fill in table.
+    if Path::new(&filepath).exists() {
+        // open the databse file for reading, make a buffered reader
+        let db_file = File::open(filepath)?;
+        let mut reader = BufReader::new(db_file);
 
-    // creater a reader and a buffer to read into
-    let mut reader = BufReader::new(db_file);
+        // deserialize the buffer into a vec of Password structs
+        let passwords: Vec<Password> = serde_json::from_reader(&mut reader)?;
 
-
-    // deserialize the buffer into a vec of Password structs
-    let passwords: Vec<Password> = serde_json::from_reader(&mut reader)?;
-
-    // insert each password into the database
-    for password in passwords {
-        insert_password(&conn, &password.service, &password.password)?;
+        // insert each password into the database
+        for password in passwords {
+            insert_password(&conn, &password.service, &password.password)?;
+        }
     }
 
-    // if successful return the connection
     Ok(conn)
 }
 
