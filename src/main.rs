@@ -494,8 +494,15 @@ fn main() {
     // start the client side gui here
     
 
-    // test communication to server application (Unix Socket)
-    
+    // test communication to server application (reqwest)
+    let response = match reqwest::blocking::get("http://127.0.0.1:6969").unwrap().text() {
+        Ok(response) => response,
+        Err(err) => {
+            error!("Error: {}", err);
+            return;
+        },
+    };
+    println!("{:#?}", response);      
 
     // print the welcome message and list of commands
     println!("Welcome to Password Manager, here is a list of commands:\n");
