@@ -15,8 +15,10 @@ I think that I am going to try to implement the password manager using threads a
 The database implementation has been finished, including encryption and decryption using AES. Storing the usernames and initialization vectors in a text file feels wrong but neither needs any real protection for the encryption to remain secure. I will find a more permanent home for those as well. I am envisioning the storage file being encrypted until server side verification of a correct master password hash, but that is far off into the future.
 
 Next steps for this project are (in the order I plan to do them):
-  - Create a logging system to more robustly handle errors / debugging (I have put this off for too long)
   - Split server side and user side functionality
+      - This stage has begun
+      - Server implementation is hidden for now since it is a dinky custom web server
+      - Will upload finished server later when implementation is more concrete.
   - Front end modeling since this is currently a CLI appication
   - Create more secure storage of usernames and Initialization Vectors
   - probably ore stuff I cannot remember
