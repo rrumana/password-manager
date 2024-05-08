@@ -14,6 +14,8 @@ I think that I am going to try to implement the password manager using threads a
 
 The database implementation has been finished, including encryption and decryption using AES. Storing the usernames and initialization vectors in a text file feels wrong but neither needs any real protection for the encryption to remain secure. I will find a more permanent home for those as well. I am envisioning the storage file being encrypted until server side verification of a correct master password hash, but that is far off into the future.
 
+While it would be more robust to use some sort of full functioning webapp framework lke Axum or Rocket, I only need simply HTTP functionality right now, so Reqwest and inbuilt HTTP functionality are fine.
+
 Next steps for this project are (in the order I plan to do them):
   - Split server side and user side functionality
       - This stage has begun
