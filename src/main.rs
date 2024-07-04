@@ -248,7 +248,7 @@ fn logout(session: &mut Session) -> Result<()> {
     session.symmetric_key = vec![0u8; 32];
     session.nonce = *Nonce::from_slice(&[0u8; 12]);
     session.conn = Connection::open_in_memory()?;
-
+    
     Ok(())
 }
 
