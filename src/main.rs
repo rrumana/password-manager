@@ -1,7 +1,7 @@
 mod crypto;
 mod password;
 
-use log::{info, warn, error, debug, trace};
+use log::{info, error, trace};
 
 use read_input::prelude::*;
 use::chrono::prelude::*;
@@ -355,25 +355,21 @@ fn get(session: &mut Session) -> Result<()> {
 }
 
 fn delete(session: &mut Session) -> Result<()> {
-    // check if user is logged in
     if !session.active {
         println!("Error: not logged in.");
         return Err(anyhow!("Cannot delete password while not logged in."));
     }  
-
-    // get the service name
+    
     let service = input::<String>()
         .repeat_msg("Enter the service name: ")
         .add_err_test(|x| !x.is_empty(), "Service name cannot be empty.")
         .try_get()?;
 
-    // confirm user intention to delete the password
     let confirm = input::<String>()
         .repeat_msg("Are you sure you would like to delete entry?\nThis action cannot be undone (y/n): ")
         .add_err_test(|x| x == "y" || x == "n", "Please enter 'y' or 'n'.")
         .try_get()?;
 
-    // remove the password for the specified service
     if confirm == "y" {
         password::delete_password(&session.conn, &service)?;
     } else {
@@ -384,19 +380,16 @@ fn delete(session: &mut Session) -> Result<()> {
 }
 
 fn purge(session: &mut Session) -> Result<()> {
-    // check if user is logged in
     if !session.active {
         println!("Error: not logged in.");
         return Err(anyhow!("Cannot delete account while not logged in."));
     } 
 
-    // confirm user intention to delete all passwords
     let confirm = input::<String>()
         .repeat_msg("Are you sure you would like to delete user?\nThis action cannot be undone (YES/NO): ")
         .add_err_test(|x| x == "YES" || x == "NO", "Please enter 'YES' or 'NO'.")
         .try_get()?;
 
-    // remove the user from the database of known users
     if confirm == "YES" {
         password::delete_database(&session.conn)?;
         password::delete_user(&session.username)?;
@@ -456,7 +449,6 @@ fn print_commands() {
 }
 
 fn cleanup() -> Result<()> {
-    // remove the session log file
     let _ = std::fs::remove_file("logs/session.log");
 
     Ok(())
@@ -468,15 +460,11 @@ fn cleanup() -> Result<()> {
 
 fn main() {
 
-    // initialize logging from configuration file
-    // since this function is fallable we need to handle the result
     match log4rs::init_file("log_config.yml", Default::default()) {
         Ok(_) => info!("New logging instance initialized"),
         Err(err) => eprintln!("Error: {}", err),
     }
 
-    // create a session instance
-    // if this process fails, log the error and exit the program
     let mut session = Session {
         active: false,
         username: String::new(),
@@ -504,12 +492,9 @@ fn main() {
     };
     println!("{:#?}", response);      
 
-    // print the welcome message and list of commands
     println!("Welcome to Password Manager, here is a list of commands:\n");
     print_commands();
 
-    // loop while handling user input until the user exits the program
-    // Recoverable errors propagated back to main are logged and the loop continues
     loop{
         match handle_commands(&mut session) {
             Ok(true) => break,
@@ -518,13 +503,11 @@ fn main() {
         }
     }
 
-    // cleanup function to remove the session log file
     match cleanup() {
         Ok(_) => info!("Successfully cleaned up system"),
         Err(err) => error!("Error: {}", err),
     };
 
-    // this line signifies in the log that the program is exiting
     // this will be removed in favor of a more idiomatic approach once the program is more complete
     info!("Exiting Password Manager");
 }
