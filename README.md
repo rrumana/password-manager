@@ -1,5 +1,7 @@
 # Password-Manager
 
+This project is going through a major rewrite. It is bloated and overengineered for what is basically two maps and some change. Hopefully updates will be more frequent, life has just been busy.
+
 I am attempting to write my own password manager in Rust.
 
 Naive implementation of the cryptography has been finished:

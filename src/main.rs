@@ -65,18 +65,13 @@ pub struct Session {
 // end message passing structs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////
-// signup functions
-
-fn signup_input(session: &mut Session) -> Result<()> {
-    // get username
+fn signup(session: &mut Session) -> Result<()> {
     let username = input::<String>()
         .repeat_msg("Enter username: ")
         .add_err_test(|x| x.len() >= 8, "Username must be at least 8 characters.")
         .add_err_test(|x| x.chars().any(|c| !c.is_whitespace()), "Username must not contain whitespace.")
         .try_get()?;
 
-    // get password and repeat until user confirms with matching password
     let mut password: String;
     let mut password_confirm: String;
 
@@ -96,48 +91,34 @@ fn signup_input(session: &mut Session) -> Result<()> {
         } else {
             println!("Error: Passwords do not match!");
         }
-
     }
 
-    // pass username and password value onto the signup function
-    signup_handler(username, password, session)?;
-
-    println!("Signup successful, welcome to Password Manager!\n");
-
-    Ok(())
-}
-
-fn signup_handler(username: String, password: String, session: &mut Session) -> Result<()> {
-    // generating keys from user input
     let master_key = crypto::kdf(&username, &password)?;
     let master_password_hash = crypto::kdf(&password, &hex::encode(&master_key))?;
     let stretched_master_key = crypto::hkdf(&master_key)?;
     
-    // generate a symmetric key and nonce for the user
     let symmetric_key = crypto::csprng::<32>();
     let iv = crypto::csprng::<12>(); 
     let nonce = *Nonce::from_slice(&iv);
 
-    // encrypt the symmetric key using the stretched master key
     let protected_symmetric_key = crypto::encrypt_aes_gcm(&symmetric_key, &stretched_master_key, &nonce)?;
 
-    // create a UserKeys object to store the keys
     let keys = UserKeys {
         master_password_hash,
         protected_symmetric_key,
         nonce,
     };
-
-    // pass the master_password_hash, protected_symmetric_key, and nonce to be stored for retrieval upon login
-    assign_key(&keys)?;
-
-    // log in as a convenience to the user
-    login_handler(username, password, session)?;
     
+    assign_key(&keys, session)?;
+    login_handler(username, password, session)?; 
+
+    println!("Signup successful, welcome to Password Manager!\n");
+    println!("You are now logged in!\n");
+
     Ok(())
 }
 
-fn assign_key(keys: &UserKeys) -> Result<()> {
+fn assign_key(keys: &UserKeys, session: &mut Session) -> Result<()> {
     
     // take user keys object and store it in the database of known users
     // immediately save database of known users to disk
@@ -145,9 +126,6 @@ fn assign_key(keys: &UserKeys) -> Result<()> {
 
     Ok(())
 }
-
-// end signup functions
-//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -181,33 +159,27 @@ fn login_input(session: &mut Session) -> Result<()> {
 }
 
 fn login_handler(username: String, password: String, session: &mut Session) -> Result<()> {
-    // generating keys from user input
     let master_key = crypto::kdf(&username, &password)?;
     let master_password_hash = crypto::kdf(&password, &hex::encode(&master_key))?;
     let stretched_master_key = crypto::hkdf(&master_key)?;
 
-    // get the UserKeys object from the database of known users
     let keys = get_key(&master_password_hash)?;
-
-    // decrypt protected symmetric key using the stretched master key
     let symmetric_key = crypto::decrypt_aes_gcm(&keys.protected_symmetric_key, &stretched_master_key, &keys.nonce)?;
 
-    // decrypt the user database
     password::decrypt_database(&username, &symmetric_key.as_slice().try_into()?)?;
 
-    // create an in memory database connection
     let conn = password::load_database(&username)?;
 
-    // load values into the current session object
     session.active = true;
     session.username = username;
     session.symmetric_key = symmetric_key;
     session.nonce = keys.nonce;
     session.conn = conn; 
 
-    // create session logfile
     let mut session_log = File::create("logs/session.log")?; 
     session_log.write_all(format!("Session started at: {}\n", Local::now()).as_bytes())?;
+
+    println!("Login successful, welcome back!\n");
 
     Ok(())
 }
@@ -417,7 +389,7 @@ fn handle_commands(session: &mut Session) -> Result<bool> {
     };
 
     match command.as_str() {
-        "signup" => signup_input(session)?,
+        "signup" => signup(session)?,
         "login" => login_input(session)?,
         "user" => user(session)?,
         "session" => audit(session)?,
@@ -483,14 +455,14 @@ fn main() {
     
 
     // test communication to server application (reqwest)
-    let response = match reqwest::blocking::get("http://127.0.0.1:6969").unwrap().text() {
-        Ok(response) => response,
-        Err(err) => {
-            error!("Error: {}", err);
-            return;
-        },
-    };
-    println!("{:#?}", response);      
+    //let response = match reqwest::blocking::get("http://127.0.0.1:6969").unwrap().text() {
+    //    Ok(response) => response,
+    //   Err(err) => {
+    //        error!("Error: {}", err);
+    //        return;
+    //    },
+    //};
+    //println!("{:#?}", response);      
 
     println!("Welcome to Password Manager, here is a list of commands:\n");
     print_commands();
