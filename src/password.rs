@@ -18,14 +18,6 @@ pub struct Password {
     pub password: String,
 }
 
-// A custom struct to store the username and nonce for each user
-// saved to disk as is
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UserNonce {
-    pub username: String,
-    pub nonce: [u8; 12],
-}
-
 pub fn create_database() -> Result<Connection> {
     let conn = Connection::open_in_memory()?;
 
