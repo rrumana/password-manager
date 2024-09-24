@@ -52,14 +52,20 @@ pub fn csprng<const LEN: usize>() ->[u8; LEN] {
 }
 
 // Encrypt plaintext using AES-256-GCM
-pub fn encrypt_aes_gcm(plaintext: &[u8], key: &[u8; 32], nonce: &Nonce) -> Result<Vec<u8>> {
+pub fn encrypt_aes_gcm(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
+    let iv = csprng::<12>(); 
+    let nonce = *Nonce::from_slice(&iv);
     let cipher = Aes256GcmSiv::new(Key::<Aes256GcmSiv>::from_slice(key));
-    let ciphertext = cipher.encrypt(nonce, plaintext).map_err(EncryptError)?;
-    Ok(ciphertext)
+    let mut ciphertext = cipher.encrypt(&nonce, plaintext).map_err(EncryptError)?;
+    let mut output = nonce.as_slice().to_vec();
+    output.append(&mut ciphertext);
+    Ok(output)
 }
 
 // Decrypt ciphertext using AES-256-GCM
-pub fn decrypt_aes_gcm(ciphertext: &[u8], key: &[u8; 32], nonce: &Nonce) -> Result<Vec<u8>> {
+pub fn decrypt_aes_gcm(input: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
+    let nonce = Nonce::from_slice(&input[0..12]);
+    let ciphertext = &input[12..];
     let cipher = Aes256GcmSiv::new(Key::<Aes256GcmSiv>::from_slice(key));
     let plaintext = cipher.decrypt(nonce, ciphertext).map_err(DecryptError)?;
     Ok(plaintext)
@@ -116,10 +122,9 @@ mod crypto_tests {
     #[test]
     fn test_aes_gcm() {
         let key = csprng::<32>();
-        let nonce = Nonce::from_slice(&[0u8; 12]);
         let plaintext = b"test plaintext";
-        let ciphertext = encrypt_aes_gcm(plaintext, &key, &nonce).unwrap();
-        let decrypted = decrypt_aes_gcm(&ciphertext, &key, &nonce).unwrap();
+        let ciphertext = encrypt_aes_gcm(plaintext, &key).unwrap();
+        let decrypted = decrypt_aes_gcm(&ciphertext, &key).unwrap();
         assert_eq!(plaintext, decrypted.as_slice());
     }
 
@@ -132,11 +137,10 @@ mod crypto_tests {
         let master_key = kdf(&salt, &payload).unwrap();
         let stretched_master_key = hkdf(&master_key).unwrap();
         let symmetric_key = csprng::<32>();
-        let nonce = Nonce::from_slice(&[0u8; 12]);
-        let protected_symmetric_key = encrypt_aes_gcm(&symmetric_key, &stretched_master_key, &nonce).unwrap();
+        let protected_symmetric_key = encrypt_aes_gcm(&symmetric_key, &stretched_master_key).unwrap();
         assert_ne!(symmetric_key, protected_symmetric_key.as_slice());
 
-        let unprotected_symmetric_key = decrypt_aes_gcm(&protected_symmetric_key, &stretched_master_key, &nonce).unwrap();
+        let unprotected_symmetric_key = decrypt_aes_gcm(&protected_symmetric_key, &stretched_master_key).unwrap();
         assert_eq!(symmetric_key, unprotected_symmetric_key.as_slice());
     }
 }

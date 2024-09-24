@@ -38,7 +38,6 @@ use aes_gcm_siv::Nonce;
 pub struct UserKeys {
     master_password_hash: [u8; 32],
     protected_symmetric_key: Vec<u8>,
-    nonce: Nonce,
 }
 
 // Struct to store the session
@@ -48,7 +47,6 @@ pub struct Session {
     active: bool,
     username: String,
     symmetric_key: Vec<u8>,
-    nonce: Nonce,
     conn: Connection,
  }
 
@@ -101,12 +99,11 @@ fn signup(session: &mut Session) -> Result<()> {
     let iv = crypto::csprng::<12>(); 
     let nonce = *Nonce::from_slice(&iv);
 
-    let protected_symmetric_key = crypto::encrypt_aes_gcm(&symmetric_key, &stretched_master_key, &nonce)?;
+    let protected_symmetric_key = crypto::encrypt_aes_gcm(&symmetric_key, &stretched_master_key)?;
 
     let keys = UserKeys {
         master_password_hash,
         protected_symmetric_key,
-        nonce,
     };
     
     assign_key(&keys, session)?;
@@ -164,7 +161,7 @@ fn login_handler(username: String, password: String, session: &mut Session) -> R
     let stretched_master_key = crypto::hkdf(&master_key)?;
 
     let keys = get_key(&master_password_hash)?;
-    let symmetric_key = crypto::decrypt_aes_gcm(&keys.protected_symmetric_key, &stretched_master_key, &keys.nonce)?;
+    let symmetric_key = crypto::decrypt_aes_gcm(&keys.protected_symmetric_key, &stretched_master_key)?;
 
     password::decrypt_database(&username, &symmetric_key.as_slice().try_into()?)?;
 
@@ -173,7 +170,6 @@ fn login_handler(username: String, password: String, session: &mut Session) -> R
     session.active = true;
     session.username = username;
     session.symmetric_key = symmetric_key;
-    session.nonce = keys.nonce;
     session.conn = conn; 
 
     let mut session_log = File::create("logs/session.log")?; 
@@ -191,7 +187,6 @@ fn get_key(master_password_hash: &[u8; 32]) -> Result<UserKeys> {
     let keys = UserKeys {
         master_password_hash: *master_password_hash,
         protected_symmetric_key: vec![0u8; 32],
-        nonce: *Nonce::from_slice(&[0u8; 12]),
     };
 
     Ok(keys)
@@ -218,7 +213,6 @@ fn logout(session: &mut Session) -> Result<()> {
     session.active = false;
     session.username = String::new();
     session.symmetric_key = vec![0u8; 32];
-    session.nonce = *Nonce::from_slice(&[0u8; 12]);
     session.conn = Connection::open_in_memory()?;
     
     Ok(())
@@ -441,7 +435,6 @@ fn main() {
         active: false,
         username: String::new(),
         symmetric_key: vec![0u8; 32],
-        nonce: *Nonce::from_slice(&[0u8; 12]),
         conn: match Connection::open_in_memory() {
             Ok(conn) => conn,
             Err(err) => {

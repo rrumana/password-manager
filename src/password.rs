@@ -5,7 +5,6 @@ use std::fs;
 use std::fs::File;
 use std::path::Path;
 use anyhow::Result;
-use aes_gcm_siv::Nonce;
 use serde::{Serialize, Deserialize};
 use rusqlite::Connection;
 
@@ -115,7 +114,6 @@ pub fn print_database(conn: &Connection) -> Result<()> {
 pub fn check_directories() -> Result<()> {
     fs::create_dir_all("database/unencrypted")?;
     fs::create_dir_all("database/encrypted")?;
-    fs::create_dir_all("database/nonce")?;
     Ok(())
 }
 
@@ -179,10 +177,6 @@ pub fn delete_user(username: &str) -> Result<()> {
         std::fs::remove_file(format!("database/encrypted/{}.db.enc", username))?;
     }
 
-    if Path::new(&format!("database/nonce/{}_nonce.txt", username)).exists() {
-        std::fs::remove_file(format!("database/nonce/{}_nonce.txt", username))?;
-    }
-
     Ok(())
 }
 
@@ -193,39 +187,18 @@ pub fn encrypt_database(username: &str, symmetric_key: &[u8; 32]) -> Result<()> 
     };
 
     let filepath = format!("database/unencrypted/{}.db", username);
+    let mut plaintext_file = File::open(&filepath)?;
+
+    let mut plaintext = Vec::new();
+    plaintext_file.read_to_end(&mut plaintext)?;
+
+    let encrypted_data = crypto::encrypt_aes_gcm(&plaintext, symmetric_key)?;
+
     let savepath = format!("database/encrypted/{}.db.enc", username);
-    let nonces = format!("database/nonce/{}_nonce.txt", username);
-
-    let iv: [u8; 12] = crypto::csprng();
-    let nonce = Nonce::from_slice(&iv);
-
-    let mut db_file = File::open(filepath)?;
     let mut encrypted_file = File::create(savepath)?;
-    
-    const BUFFER_SIZE: usize = 16;
-    let mut buffer = [0u8; BUFFER_SIZE];
+    encrypted_file.write_all(&encrypted_data)?;
 
-    loop {
-        let bytes = db_file.read(&mut buffer)?;
-        if bytes == BUFFER_SIZE {
-            let encrypted_buffer = crypto::encrypt_aes_gcm(&buffer, symmetric_key, &nonce)?;
-            encrypted_file.write(&encrypted_buffer)?;
-        } else {
-            let encrypted_buffer = crypto::encrypt_aes_gcm(&buffer[..bytes], symmetric_key, &nonce)?;
-            encrypted_file.write(&encrypted_buffer)?;
-            break;
-        }
-    }
-
-    let nonce_vec = nonce.to_vec();
-    let nonce_slice = &nonce_vec[..];
-
-    let temp_nonce = UserNonce {
-        username: username.to_string(),
-        nonce: nonce_slice.try_into()?,
-    };
-
-    serde_json::to_writer(&mut File::create(nonces)?, &temp_nonce)?;
+    fs::remove_file(filepath)?;
 
     Ok(())
 }
@@ -237,33 +210,18 @@ pub fn decrypt_database(username: &str, symmetric_key: &[u8; 32]) -> Result<()> 
     };
 
     let filepath = format!("database/encrypted/{}.db.enc", username);
+    let mut encrypted_file = File::open(&filepath)?;
+
+    let mut encrypted_data = Vec::new();
+    encrypted_file.read_to_end(&mut encrypted_data)?;
+
+    let plaintext = crypto::decrypt_aes_gcm(&encrypted_data, symmetric_key)?;
+
     let savepath = format!("database/unencrypted/{}.db", username);
-    let user_filepath = format!("database/nonce/{}_nonce.txt", username);
+    let mut plaintext_file = File::create(savepath)?;
+    plaintext_file.write_all(&plaintext)?;
 
-    let nonce_file = File::open(user_filepath)?;
-
-    let usernonce: UserNonce = serde_json::from_reader(nonce_file)?;
-    let nonce = Nonce::from_slice(&usernonce.nonce);
-
-    let mut encrypted_file = File::open(filepath)?;
-    let mut db_file = File::create(savepath)?;
-    
-    const BUFFER_SIZE: usize = 32;
-    let mut buffer = [0u8; BUFFER_SIZE];
-
-    loop {
-        let bytes = encrypted_file.read(&mut buffer)?;
-        if bytes == BUFFER_SIZE {
-            let decrypted_buffer = crypto::decrypt_aes_gcm(&buffer, symmetric_key, &nonce)?;
-            db_file.write(&decrypted_buffer)?;
-        } else if bytes == 0 {
-            break;
-        } else {
-            let decrypted_buffer = crypto::decrypt_aes_gcm(&buffer[..bytes], symmetric_key, &nonce)?;
-            db_file.write(&decrypted_buffer)?;
-            break;
-        }
-    }
+    fs::remove_file(filepath)?;
 
     Ok(())
 }
